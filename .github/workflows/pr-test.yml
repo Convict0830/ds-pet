@@ -1,0 +1,175 @@
+name: PR Test Gate
+
+# PR/push 门禁：测试 + ruff。与 build-windows.yml（tag/手动触发的打包发布）
+# 职责不同——本工作流给每个 PR 提供红绿判定，防止「测试只在本机是财富」。
+# （个人版 1.0 起为 Windows-only：Linux/macOS 构建与矩阵已随三端支持移除。）
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # 手动运行（Actions 页面 → Run workflow）：用于跨机对齐——手动指定
+  # source_ref 时检出同一棵树。PR 路径不受影响：PR 事件仍检出合并提交
+  # （refs/pull/N/merge），保留「集成后才有红绿判定」的语义。
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: '要验证的 ref/SHA（留空 = 本 workflow 的触发 ref，即默认检出）'
+        required: false
+        type: string
+        default: ''
+
+# 同一 PR/分支的旧 run 自动取消：每次推送只为最新代码付 CI 的钱，
+# 被取代的 run 的红绿本来就没有意义。
+concurrency:
+  group: pr-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        python: ['3.11']
+        include:
+          # 3.13 = 发布产物的实际运行时（打包机 CPython 3.13）。
+          # 3.11 保留：源码运行用户的兼容地板。
+          - os: windows-latest
+            python: '3.13'
+
+    runs-on: ${{ matrix.os }}
+
+    # 编码隔离（issue #26）：强制 UTF-8，避免中文源码/资源被 legacy 编码二次解码
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+      QT_QPA_PLATFORM: offscreen
+      # keyring 在无桌面环境的 runner 上可能弹后端探测；测试不需要真实钥匙串
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # PR 事件下 github.sha = 合并提交（refs/pull/N/merge），保持「集成后
+          # 才能过门」的语义；手动 dispatch 用 source_ref 指向同一棵树。留空即
+          # 回落 github.sha（= 事件默认检出的那个提交）。
+          ref: ${{ github.event.inputs.source_ref || github.sha }}
+
+      - name: Record resolved source SHA
+        shell: bash
+        run: |
+          HEAD_SHA="$(git rev-parse HEAD)"
+          {
+            echo "### ${{ matrix.os }} 解析到的源码版本"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| event | ${{ github.event_name }} |"
+            echo "| workflow ref | ${{ github.ref }} |"
+            echo "| github.sha（PR = 合并提交） | ${{ github.sha }} |"
+            echo "| PR head sha（分支 tip） | ${{ github.event.pull_request.head.sha }} |"
+            echo "| checkout HEAD | $HEAD_SHA |"
+            echo "| checkout HEAD 摘要 | $(git log -1 --format=%s)"
+            echo ""
+            echo "PR 事件下 checkout HEAD 是合并提交（集成语义），不等于分支 tip；"
+            echo "跨机对齐请用手动 dispatch + source_ref 指向同一提交。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # bridge 门禁依赖 `node --test`（Node 20 无 glob，清单硬编码在下面）。
+      # 显式固定 Node 版本：runner 预装版本会随时间漂移，门禁口径不能跟着飘。
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 「这一轮到底装了什么」必须留痕：requirements.txt 全是 `>=` 无上限、
+      # 无 lock，各机各自解析最新兼容版；imageio-ffmpeg 每平台是不同的 ffmpeg
+      # 构建，是 webm 族时序 flake 的平台差异源。
+      - name: Record toolchain versions
+        shell: bash
+        run: |
+          NODE_VERSION="$(node --version)"
+          python -m pip freeze > "$RUNNER_TEMP/pip-freeze.txt"
+          {
+            echo "### ${{ matrix.os }} 工具链"
+            echo ""
+            echo "- python: $(python --version 2>&1)"
+            echo "- node: $NODE_VERSION"
+            echo ""
+            echo "<details><summary>pip freeze</summary>"
+            echo ""
+            echo '```'
+            cat "$RUNNER_TEMP/pip-freeze.txt"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ruff
+        run: ruff check pet/ tests/
+
+      # 桥接插件零依赖门禁（2026-09 事故回归防线）：bridge 经 pnpm link: 链进
+      # 用户 profile，link 不装依赖、链接目标常是打包版 _internal 副本（无
+      # node_modules）——任何外部 bare import 都会让用户开联动后整个 dsh
+      # 插件树加载失败。
+      # 两层校验：node --test 跑全部 bridge 契约测试（原地 import 捕获
+      # 静态外部依赖回归）；verify_import.mjs 做 hermetic 校验。
+      # 注意：新增 bridge 测试文件时必须同步下面的显式清单（Node 20 无 glob）。
+      - name: Bridge plugin zero-dependency gate
+        run: |
+          node --test tests/test_bridge_hardfailure.js tests/test_bridge_instance_scope.js tests/test_bridge_interaction_dedup.js tests/test_bridge_manifest.js tests/test_bridge_question_callid.js tests/test_bridge_retry.js tests/test_bridge_root_control.js tests/test_bridge_user_action_guard.js
+          node integrations/dsh-pet-bridge/verify_import.mjs
+
+      # Windows 主套件走分片（scripts/ci_shards.py：收集序四等分、四个独立进程）：
+      # 单进程整跑会在 ~2/3 处反复 access violation（崩点漂移的堆腐蚀签名）。
+      # 分片让每个进程的堆状态从头开始，腐蚀没有积累窗口，且崩溃归因更准
+      # （崩在哪个分片日志直接点名）。不掩盖失败：任一分片红 = 本步红 = job 红。
+      - name: Pytest (main suite, Windows shards)
+        run: python scripts/ci_shards.py
+
+      # webm 生命周期族（reader/ffmpeg 进程 teardown 竞态）偶发段错误。
+      # 段错误会杀掉整个 pytest 进程、拖垮主套件的结果报告，因此拆成
+      # 独立步骤：崩溃时只隔离失败这一步，主套件结果照常产出。
+      # 注意：拆步骤不改变测试内容，不掩盖失败——该红还是红。
+      - name: Pytest (webm lifecycle family, isolated)
+        run: python -m pytest -q tests/test_webm_reader_lifecycle.py tests/test_webm_clip_lifecycle.py tests/test_webm_first_frame_lock.py
+
+      # 低优预热让路族（test_low_priority_warm_interaction_yield.py）依赖真实
+      # 线程编舞（worker 阻塞/放行），断言本身正确但时序窗口在 CI 满载 runner
+      # 上会被极度拉长。隔离 + 允许一次重跑：重跑仍红才算真失败。
+      - name: Pytest (low-priority warm family, isolated + one retry)
+        run: python -m pytest -q tests/test_low_priority_warm_interaction_yield.py || python -m pytest -q tests/test_low_priority_warm_interaction_yield.py
+
+      # frameseq 崩溃家族已根治（2026-10-04，docs/PR-REPORT-QT-LIFECYCLE-CRASH-FAMILY）：
+      # 修复 = 进程级强钉 + 退役制收口。本步骤保留为 frameseq 族的独立重跑位
+      # （崩溃杀进程时主套件报告不受影响），照跑照判红。
+      - name: Pytest (frameseq native-crash isolates, isolated + one retry)
+        run: python -m pytest -q tests/test_frameseq_prefetch_watchdog.py tests/test_frameseq_clip.py || python -m pytest -q tests/test_frameseq_prefetch_watchdog.py tests/test_frameseq_clip.py
+
+      # 放在所有 pytest 步骤之后，主套件或隔离族失败均可回读最后运行的面包屑。
+      # 失败详情由 conftest 当刻写 stderr；这里只读末尾，不输出两万多行。
+      - name: Pytest crash diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          DIR="${RUNNER_TEMP:-$TMPDIR}/dspet-pytest-diag"
+          if [ -f "$DIR/pytest-breadcrumb.txt" ]; then
+            echo "::group::dspet-pytest-diag/pytest-breadcrumb.txt (tail -30)"
+            tail -n 30 "$DIR/pytest-breadcrumb.txt"
+            echo "::endgroup::"
+          fi
