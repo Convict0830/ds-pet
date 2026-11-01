@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "notes": "个人版首个发布（fork 自 MerZlin/dsh-pet-indesktop v4.4.0）。仅 Windows；精简分发包随包 11 段核心动画，其余 95 段在 设置 → 桌宠 → 角色与素材 在线补齐。",
+  "html_url": "https://github.com/Convict0830/ds-pet/releases",
+  "assets": {
+    "dsh-pet-standalone-webm-setup.exe": {
+      "fileName": "dsh-pet-standalone-webm-setup.exe",
+      "urls": [
+        "https://github.com/Convict0830/ds-pet/releases/download/v1.0/dsh-pet-standalone-webm-setup.exe",
+        "https://gh-proxy.com/https://github.com/Convict0830/ds-pet/releases/download/v1.0/dsh-pet-standalone-webm-setup.exe",
+        "https://mirror.ghproxy.com/https://github.com/Convict0830/ds-pet/releases/download/v1.0/dsh-pet-standalone-webm-setup.exe"
+      ],
+      "size": 301374974,
+      "sha256": "f08d756d1a18b11e646179421ee37060a613aa94628933eebed44880fa9ad26e",
+      "platform": "windows",
+      "kind": "installer",
+      "variant": "webm"
+    }
+  }
+}

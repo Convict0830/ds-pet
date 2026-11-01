@@ -125,7 +125,7 @@ class UpdateDialog(QDialog):
         self._busy = False
         if isinstance(result, Exception) or result is None:
             self.release = None
-            self._set_state("无法连接更新服务，请检查网络后重试。", checking=False)
+            self._set_state("无法连接更新服务（或本仓库还没有发布任何 Release）。", checking=False)
             self.manual_button.setEnabled(True)
             return
         self.release = result
