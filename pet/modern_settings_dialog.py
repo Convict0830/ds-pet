@@ -101,8 +101,8 @@ from .menu_layout import (
 from . import settings_close_flow
 from .application_icon import load_application_icon
 from .settings_slot_config import route_settings_config
+from .settings_about import build_author_section
 from .speech_bubble import BUBBLE_STYLE_PRESETS
-from .update_settings import UpdatePage
 
 
 def _chat_feature_available() -> bool:
@@ -274,8 +274,7 @@ class ModernSettingsDialog(QDialog):
     """Settings window matching Modern's sidebar and rounded-card hierarchy."""
 
     def __init__(self, config, parent=None, *, include_ai: bool = True,
-                 standalone: bool = False, initial_page: str | None = None,
-                 chat_build_capable: bool | None = None):
+                 standalone: bool = False, initial_page: str | None = None):
         super().__init__(parent)
         # slot 设置页（含 #271 起的主宠页 = slot0 页）：非 per-slot 键直读**主**配置
         #（而不是 slot 文件里的无效快照），保存时按同一分流写回。
@@ -286,11 +285,9 @@ class ModernSettingsDialog(QDialog):
         opener = getattr(config, "new_form_view", None)
         self.config = config = opener() if callable(opener) else config
         self.include_ai = bool(include_ai)
-        # 构建变体真值（no-chat 包）：只供更新器选安装包——不能随 chat 功能
-        # 模块启停变化（astra 盲审 P1：关掉 chat 模块的用户更新时会被发成
-        # 纯桌宠安装包）。缺省回落 include_ai（旧调用方语义不变）。
-        self.chat_build_capable = (
-            bool(include_ai) if chat_build_capable is None else bool(chat_build_capable))
+        # 构建变体真值（no-chat 包）曾从这里喂给「更新」页选安装包变体
+        # （astra 盲审 P1-2）；2026-11-01 晚「更新」页移出设置窗后，该真值
+        # 改由 pet/app.py 的 _open_update_dialog 直传独立更新对话框。
         # standalone=True：本对话框跑在独立设置进程（python -m pet --settings）里，
         # 没有桌宠窗口/AppShell 可依附。只影响下面几处显式分支，默认 False 时
         # 全部行为与改动前逐位一致。
@@ -1022,18 +1019,15 @@ class ModernSettingsDialog(QDialog):
 
             self.festival_page = FestivalSettingsPage(self.config, self)
 
-        # 更新页是命令/状态面板，不写入 Config；它与常规域同级，便于从菜单
-        # 和设置窗口进入同一套检查、下载、校验、安装流程。更新源指向个人
-        # 分叉仓库（pet/updater.py 的 REPO），作者署名区也挂在本页底部。
-        self.update_page = UpdatePage(
-            self.config, include_chat=self.chat_build_capable, parent=self
-        )
+        # 「更新」页已移除（2026-11-01 晚）：检查更新是一次性命令，按
+        # docs/SETTINGS-CHANGE-GATES.md 准入不进设置页；检查/下载/安装在
+        # 独立对话框（pet/update_settings.py），由右键菜单链路弹出。
         self._rebuild_domain_navigation()
         self.sidebar.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.sidebar.setCurrentRow(0)
         if self.initial_page:
             self.select_page(self.initial_page)
-        # 索引口径：标准设置行 + 「更新」页的作者账号行（后者不是 SettingRow，
+        # 索引口径：标准设置行 + 「常规」页的作者账号行（后者不是 SettingRow，
         # 但暴露同名的 label/hint_label，故同一套匹配函数就能覆盖；侧栏命令类
         # 控件仍不进索引——那是 docs/SETTINGS-CHANGE-GATES.md 里的既有决定）。
         # 索引由 _rebuild_domain_navigation 末尾统一收集（过滤未挂载行并随
@@ -1792,7 +1786,7 @@ class ModernSettingsDialog(QDialog):
         return page
 
     def select_page(self, label: str) -> bool:
-        """按侧栏标题选中页面，供右键菜单/更新通知做深链接。"""
+        """按侧栏标题选中页面，供右键菜单做深链接。"""
         target = str(label or "").strip()
         for index in range(self.sidebar.count()):
             if self.sidebar.item(index).text() == target:
@@ -1872,6 +1866,9 @@ class ModernSettingsDialog(QDialog):
                 # 首屏只回答"第一天会问的问题"：凡答案涉及 harness/dsh 的（自启服务、
                 # 自启目标）都是第 N 天才用的，进折叠——不是藏功能，是按"第几天用到"分层。
                 ("启动项（高级）", claim("harness_autostart", "harness_launch_target"), True),
+                # 作者账号区（随「更新」页移出设置迁来，2026-11-01）：已构造好的
+                # 块原样进布局（不是 (title, rows) 元组，见 page_content 的分支）。
+                build_author_section(),
                 # 「多开」分组已随拓扑收口 Phase A 隐藏（见上方注释）
             ]
         )
@@ -2199,7 +2196,6 @@ class ModernSettingsDialog(QDialog):
             "自动化与联动": automation,
             "语音": voice,
             "文件识别": file_interpret,
-            "更新": self.update_page,
         }
         for label, icon in SETTINGS_DOMAIN_NAV:
             content = domain_content.get(label)

@@ -13,8 +13,8 @@
    非撑满子控件**算，默认字体下恒为 200（逐像素不变），放大字体下跟着长；**构造之后
    字体才变大也要跟上**（系统放大字体 / 无障碍放大 / 截图脚本的 ``--font-scale`` 都是
    这条路，所以不能只在构造时算一次）。
-2. **导航可达**：默认窗口 800×560 下 11 个能力域必须全部落在视口里（默认尺寸就把
-   「更新」截掉一半＝用户看不到还有这一页）；720×500 下允许滚动，但每一行都要能选中
+2. **导航可达**：默认窗口 800×560 下 10 个能力域必须全部落在视口里（默认尺寸就把
+   「文件识别」截掉一半＝用户看不到还有这一页）；720×500 下允许滚动，但每一行都要能选中
    并切到对应页。
 3. **窗口图标**：``setWindowTitle`` 之后挂正式桌宠图标（``load_application_icon``），
    原生标题栏不再摆系统给的那一个；图标拿不到时照旧能建窗（空图标，不抛异常）。
@@ -178,7 +178,7 @@ def test_sidebar_width_tracks_a_font_change_after_construction(tmp_path, monkeyp
 
 # ------------------------------------------------------------------ 2. 导航可达
 def test_default_window_shows_every_domain_without_scrolling(tmp_path, monkeypatch):
-    """默认窗口 800×560：11 个能力域全部落在侧栏视口里（不必滚动才发现最后一域）。
+    """默认窗口 800×560：10 个能力域全部落在侧栏视口里（不必滚动才发现最后一域）。
 
     判据是 ``scrollBar.maximum() == 0``：内容只要比视口高 1px，Qt 就把它抬到 1（实测
     556 → 555 的分界），没有"差一点也算过"的余地。余量只来自侧栏纵向间距——导航行高是
@@ -187,15 +187,16 @@ def test_default_window_shows_every_domain_without_scrolling(tmp_path, monkeypat
     第 10 行落到视口外（ubuntu-latest 红、windows/macOS 绿）；间距因此收到 3px，
     本机余量 4 → 19px。2026-10-21 能力域 10 → 11（新增「功能」域）：行高按同一判据
     从 34 校准到 31（实测 11 × 31 余量 17px，与之前相当），间距与行距不动。
-    2026-11-01 上午「更新」域曾随更新功能移除而短暂为 10；当晚更新功能恢复
-    （更新源指向个人分叉仓库），回到 11 行口径。
+    2026-11-01「更新」域两度变迁：上午随更新功能移除为 10，中午随恢复回到 11；
+    晚上按「命令不进设置页」最终定形——更新收进独立对话框（pet/update_settings.py），
+    回到 10 行口径，右键菜单「检查更新」入口不变。
     别的平台再把这份余量吃掉，说明"默认尺寸真的装不下"，
     修法是继续收间距或按字体度量重算预算，不是放宽这条断言。
     """
     dialog = _dialog(tmp_path, monkeypatch)
     try:
         sidebar = dialog.sidebar
-        assert sidebar.count() >= 11, "能力域少了一个（本用例会假绿）"
+        assert sidebar.count() >= 10, "能力域少了一个（本用例会假绿）"
         assert sidebar.verticalScrollBar().maximum() == 0, (
             "默认尺寸下侧栏仍需滚动：最后一个能力域被截在视口外")
         viewport = sidebar.viewport().height()
@@ -332,7 +333,7 @@ def test_wide_window_keeps_the_form_at_a_reading_width(tmp_path, monkeypatch):
             _settle()
             page, scroll, root = _content_of(dialog, domain)
             if scroll is None:
-                continue  # 「更新」是命令面板，不是设置表单
+                continue  # 非设置表单页（如布局编辑器以外的命令面板形态）
             if domain == "菜单":
                 assert root.maximumWidth() > READING_WIDTH, (
                     "布局编辑器需要更宽的两栏，自己声明的上限应当大于默认值")
@@ -442,8 +443,9 @@ def test_save_and_exit_button_asks_for_the_save_icon(tmp_path, monkeypatch):
 #: 一级能力域的准入判据（`docs/SETTINGS-CHANGE-GATES.md`「准入记录」末段）：新增一级域须
 #: "代表长期独立用户目标、预计包含**至少两个**稳定设置组"。下面这两个域是该判据落地之前
 #: 就在的既成事实，作为快照豁免；它们现在是 1 组就写 1 组——将来变多，这条断言会逼你更新
-#: 快照，免得豁免名单悄悄扩大成垃圾桶。
-DOMAINS_WITH_ONE_GROUP = {"文件识别", "更新"}
+#: 快照，免得豁免名单悄悄扩大成垃圾桶。（「更新」域曾在此名单里，2026-11-01 晚随
+#: 更新页移出设置而移除。）
+DOMAINS_WITH_ONE_GROUP = {"文件识别"}
 
 
 def test_new_top_level_domain_must_own_at_least_two_setting_groups(tmp_path, monkeypatch):

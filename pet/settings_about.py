@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Read-only author information shown at the bottom of the Updates page."""
+"""Read-only author information shown at the bottom of the General settings page."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Qt, QUrl
@@ -21,7 +21,7 @@ GITHUB_PROFILE = "https://github.com/MerZlin"
 
 
 def build_author_section(parent: QWidget | None = None) -> SettingsSection:
-    """作者账号分区，挂在「更新」页底部。
+    """作者账号分区，挂在「常规」页底部（2026-11-01 晚随「更新」页移出设置而迁来）。
 
     深浅不在本模块钉死：``vector_widget_icon`` 会把渲染请求记在按钮上，设置窗开窗与
     切主题时按**它自己的**主题（``settingsDark``）重画（``refresh_settings_icons``）——

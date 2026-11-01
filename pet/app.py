@@ -335,15 +335,13 @@ class _UpdateBridge(_BackgroundResult):
             return
         if alive:
             self.parent.show_bubble(
-                f"发现新版本 v{tag}（当前 {updater.APP_VERSION}）。"
-                "正在打开“更新”页，可直接下载并安装。",
-                duration_ms=9000,
+                f"发现新版本 v{tag}（当前 {updater.APP_VERSION}），已打开更新窗口。",
+                duration_ms=6000,
             )
             owner = self.owner
-            instance = getattr(owner, "instance", None) if owner is not None else None
-            open_settings = getattr(instance, "open_modern_settings", None)
-            if callable(open_settings):
-                QTimer.singleShot(0, lambda: open_settings(initial_page="更新"))
+            open_dialog = getattr(owner, "_open_update_dialog", None)
+            if callable(open_dialog):
+                QTimer.singleShot(0, lambda: open_dialog(release))
 
 
 # 批5.2 §③.7：多窗日志用 [slot-N] 前缀区分。单进程多窗共享一份日志文件，
@@ -1096,7 +1094,6 @@ class PetInstance:
                 self.win,
                 include_ai=self.enable_chat,
                 initial_page=initial_page,
-                chat_build_capable=self.chat_build_capable,
             )
             dialog.finished.connect(self._modern_settings_finished)
             self.modern_settings_dialog = dialog
@@ -1377,6 +1374,9 @@ class AppShell:
         self._balance_timer = QTimer()
         self._balance_timer.timeout.connect(self.show_balance)
         self._update_bridge = None
+        # 「更新」设置页移除后的独立对话框引用（发现新版本时弹出，见
+        # _open_update_dialog）；持引用防非模态窗口被 GC。
+        self._update_dialog = None
         self._balance_cache_path = config.dir / 'balance_cache.json'  # 跨实例共享余额缓存（按 provider 绑定）
         # 待办提醒：进程级单例（多窗共用一个调度器，避免每窗一个定时器重复通知），
         # Phase 1 门控：默认懒创建——配置关闭时不构造、不跑 30s 定时器；关闭且
@@ -4245,6 +4245,25 @@ class AppShell:
             bridge.done.emit(bool(release), release or "无法连接更新服务，请稍后重试。")
 
         threading.Thread(target=worker, daemon=True, name="pet-update-check").start()
+
+    def _open_update_dialog(self, release: dict) -> None:
+        """弹出独立更新对话框（「更新」设置页移除后的落点，2026-11-01）。
+
+        预填菜单链路查到的 release；include_chat 吃构建变体真值（astra 盲审
+        P1-2：chat 模块关 ≠ 纯桌宠构建，不能把用户更新成 no-chat 安装包）。
+        """
+        from .update_settings import UpdateDialog
+
+        old = getattr(self, "_update_dialog", None)
+        if old is not None and shiboken6.isValid(old):
+            old.close()
+            old.deleteLater()
+        win = self.instance.win if self.instance is not None else None
+        dialog = UpdateDialog(
+            self.config, release, include_chat=self.chat_build_capable, parent=win,
+        )
+        self._update_dialog = dialog  # 持引用：非模态窗口没了引用会被 GC
+        dialog.show()
 
     # ------------------------------------------------------------ 生小肥鱼 / 多窗
     def spawn_pet(self) -> None:

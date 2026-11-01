@@ -116,25 +116,46 @@ def test_search_index_excludes_unmounted_rows(tmp_path, monkeypatch):
 
 
 def test_updater_uses_build_capability_not_module_gate(tmp_path, monkeypatch):
-    """更新器吃构建变体真值：chat 模块关（include_ai=False）但完整版构建时，
-    include_chat 仍是 True；缺省不传时回落 include_ai（旧语义）。"""
+    """更新器吃构建变体真值：chat 模块关（enable_chat=False）但完整版构建时，
+    更新对话框的 include_chat 仍是 True（模块关不送纯桌宠安装包）。
+
+    2026-11-01 晚起「更新」页移出设置窗，include_chat 的接线从
+    ModernSettingsDialog(chat_build_capable=…) 改为 AppShell._open_update_dialog
+    直传（原对话框参数随更新页一并删除）。"""
     import pet.modern_settings_dialog as settings_mod
     from pet.config import Config
 
     app = _qapp()
     monkeypatch.setattr(settings_mod.autostart_mod, "is_enabled", lambda: False)
-    dlg = settings_mod.ModernSettingsDialog(
-        Config(tmp_path), include_ai=False, chat_build_capable=True)
+    dlg = settings_mod.ModernSettingsDialog(Config(tmp_path), include_ai=False)
     try:
-        assert dlg.update_page.include_chat is True  # 模块关不送纯桌宠安装包
+        assert not hasattr(dlg, "chat_build_capable"), "参数已随更新页删除，别复活死接线"
+        assert not hasattr(dlg, "update_page")
     finally:
         dlg.close()
         app.processEvents()
-    dlg2 = settings_mod.ModernSettingsDialog(Config(tmp_path), include_ai=False)
+
+    from PySide6.QtWidgets import QWidget
+
+    from pet.app import AppShell
+
+    class _Instance:
+        win = QWidget()
+
+    shell = AppShell.__new__(AppShell)
+    shell.config = Config(tmp_path)
+    shell.instance = _Instance()
+    shell._chat_build_capable = True  # 构建变体真值：chat 模块关 ≠ 纯桌宠构建
     try:
-        assert dlg2.chat_build_capable is False  # 缺省回落旧语义
+        shell._open_update_dialog({"version": "9.9.9", "notes": "n",
+                                   "assets": {}, "asset_details": {}})
+        assert shell._update_dialog.include_chat is True
     finally:
-        dlg2.close()
+        dlg2 = getattr(shell, "_update_dialog", None)
+        if dlg2 is not None:
+            dlg2.close()
+            dlg2.deleteLater()
+        shell.instance.win.close()
         app.processEvents()
 
 

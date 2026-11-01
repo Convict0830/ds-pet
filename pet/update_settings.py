@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Modern settings page for online updates."""
+"""检查/下载/安装更新的独立对话框。
+
+2026-11-01 晚起：设置窗的「更新」域移除——「检查更新」是一次性命令，按
+docs/SETTINGS-CHANGE-GATES.md 的准入（命令默认不准入设置页）本就不该
+占一个侧栏域。右键菜单「检查更新」（`pet/app.py` 的 `_UpdateBridge`）
+发现新版本后弹出本对话框并预填结果；作者账号区随「更新」页移出设置，
+改挂「常规」页（`pet/settings_about.py`）。
+"""
 
 from __future__ import annotations
 
@@ -9,28 +16,34 @@ import threading
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QFrame,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QProgressBar,
     QVBoxLayout,
-    QWidget,
 )
 
 from . import __version__, updater
-from .settings_about import build_author_section
 
 
-class UpdatePage(QWidget):
-    """检查、下载并安装更新；不写入 Config，避免把一次性命令变成设置项。"""
+class UpdateDialog(QDialog):
+    """检查、下载并安装更新；不写入 Config，避免把一次性命令变成设置项。
+
+    构造时给 ``release`` 就直接呈现该检查结果（菜单链路的预填路径）；
+    不给则保持「尚未检查」，由用户点「检查更新」发起。不在构造函数里
+    自动联网——测试与被动弹出都不该有隐式网络行为。
+    """
 
     check_finished = Signal(object)
     download_finished = Signal(object)
     download_progress = Signal(int, int)
 
-    def __init__(self, config, *, include_chat: bool = True, parent=None):
+    def __init__(self, config, release: dict | None = None, *,
+                 include_chat: bool = True, parent=None):
         super().__init__(parent)
+        self.setWindowTitle("检查更新")
+        self.setMinimumWidth(440)
         self.config = config
         self.include_chat = bool(include_chat)
         self.release: dict | None = None
@@ -39,32 +52,31 @@ class UpdatePage(QWidget):
         self.check_finished.connect(self._on_check_finished)
         self.download_finished.connect(self._on_download_finished)
         self.download_progress.connect(self._on_download_progress)
+        if release is not None:
+            self._on_check_finished(release)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-        intro = QLabel(
-            f"当前版本 v{__version__}。更新检查会优先使用 GitHub API，连接失败时自动切换到 CDN 镜像。",
-            self,
-        )
-        intro.setWordWrap(True)
-        intro.setObjectName("updateIntro")
-        layout.addWidget(intro)
-
-        status_card = QFrame(self)
-        status_card.setObjectName("updateStatusCard")
-        status_layout = QVBoxLayout(status_card)
-        status_layout.setContentsMargins(16, 14, 16, 14)
-        status_layout.setSpacing(8)
-        self.version_label = QLabel(f"当前版本  v{__version__}", status_card)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
+        self.version_label = QLabel(f"当前版本  v{__version__}", self)
         self.version_label.setObjectName("updateCurrentVersion")
-        self.status_label = QLabel("尚未检查更新", status_card)
+        self.status_label = QLabel("尚未检查更新。更新源为本仓库 GitHub Releases，"
+                                   "GitHub 不可达时自动切换到 CDN 镜像。", self)
         self.status_label.setObjectName("updateStatus")
         self.status_label.setWordWrap(True)
-        status_layout.addWidget(self.version_label)
-        status_layout.addWidget(self.status_label)
-        layout.addWidget(status_card)
+        self.notes_label = QLabel("", self)
+        self.notes_label.setObjectName("updateNotes")
+        self.notes_label.setWordWrap(True)
+        self.notes_label.setTextInteractionFlags(
+            self.notes_label.textInteractionFlags()
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        self.notes_label.hide()
+        layout.addWidget(self.version_label)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.notes_label)
 
         action_row = QHBoxLayout()
         action_row.setSpacing(8)
@@ -93,28 +105,6 @@ class UpdatePage(QWidget):
         self.progress.hide()
         layout.addWidget(self.progress)
 
-        notes_card = QFrame(self)
-        notes_card.setObjectName("updateNotesCard")
-        notes_layout = QVBoxLayout(notes_card)
-        notes_layout.setContentsMargins(16, 14, 16, 14)
-        notes_layout.setSpacing(6)
-        notes_title = QLabel("新版本说明", notes_card)
-        notes_title.setObjectName("updateNotesTitle")
-        self.notes_label = QLabel("检查到新版本后，这里会显示版本说明。", notes_card)
-        self.notes_label.setObjectName("updateNotes")
-        self.notes_label.setWordWrap(True)
-        self.notes_label.setTextInteractionFlags(
-            self.notes_label.textInteractionFlags()
-            | Qt.TextInteractionFlag.TextSelectableByMouse
-            | Qt.TextInteractionFlag.TextSelectableByKeyboard
-        )
-        self.notes_label.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        notes_layout.addWidget(notes_title)
-        notes_layout.addWidget(self.notes_label)
-        layout.addWidget(notes_card)
-        layout.addWidget(build_author_section(self))
-        layout.addStretch(1)
-
     def check_for_updates(self) -> None:
         if self._busy:
             return
@@ -125,11 +115,11 @@ class UpdatePage(QWidget):
             try:
                 result = updater.latest_release()
             except Exception as exc:  # noqa: BLE001
-                logging.exception("设置页检查更新失败")
+                logging.exception("更新对话框检查更新失败")
                 result = exc
             self.check_finished.emit(result)
 
-        threading.Thread(target=worker, daemon=True, name="pet-settings-update-check").start()
+        threading.Thread(target=worker, daemon=True, name="pet-update-dialog-check").start()
 
     def _on_check_finished(self, result) -> None:
         self._busy = False
@@ -144,11 +134,12 @@ class UpdatePage(QWidget):
         if not updater.is_newer(tag):
             self.install_button.setEnabled(False)
             self._set_state(f"已经是最新版本（v{__version__}）。", checking=False)
-            self.notes_label.setText("当前没有可用更新。")
+            self.notes_label.hide()
             return
         asset = updater.select_windows_installer(result, include_chat=self.include_chat)
         notes = str(result.get("notes") or "暂无版本说明。")
-        self.notes_label.setText(notes)
+        self.notes_label.setText(f"新版本说明：{notes}")
+        self.notes_label.show()
         integrity_ready = bool(asset and asset.get("size") is not None and asset.get("sha256"))
         self.install_button.setEnabled(integrity_ready and updater.can_auto_install())
         if asset is None:
@@ -187,7 +178,7 @@ class UpdatePage(QWidget):
                 logging.exception("下载更新失败")
                 self.download_finished.emit(exc)
 
-        threading.Thread(target=worker, daemon=True, name="pet-settings-update-download").start()
+        threading.Thread(target=worker, daemon=True, name="pet-update-dialog-download").start()
 
     def _on_download_progress(self, current: int, total: int) -> None:
         if total > 0:
@@ -211,7 +202,7 @@ class UpdatePage(QWidget):
             return
         self._set_state("安装器已启动，软件将关闭并自动重启。", checking=False)
         self.install_button.setEnabled(False)
-        self.window().close()
+        self.close()
 
     def open_download_page(self) -> None:
         url = str((self.release or {}).get("html_url") or updater.REPO_URL)
@@ -222,4 +213,4 @@ class UpdatePage(QWidget):
         self.check_button.setEnabled(not checking and not self._busy)
 
 
-__all__ = ["UpdatePage"]
+__all__ = ["UpdateDialog"]

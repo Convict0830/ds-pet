@@ -1,4 +1,4 @@
-"""Author accounts are a read-only section on the Updates page, in both settings variants."""
+"""Author accounts are a read-only section on the General page, in both settings variants."""
 from __future__ import annotations
 
 import copy
@@ -46,7 +46,7 @@ def test_author_actions_take_the_settings_surface_theme():
 
 
 @pytest.mark.parametrize("include_ai", [True, False])
-def test_author_section_sits_on_the_updates_page(tmp_path, monkeypatch, include_ai):
+def test_author_section_sits_on_the_general_page(tmp_path, monkeypatch, include_ai):
     cfg = Config(base=tmp_path)
     dialog = ModernSettingsDialog(cfg, include_ai=include_ai)
     opened = []
@@ -56,10 +56,12 @@ def test_author_section_sits_on_the_updates_page(tmp_path, monkeypatch, include_
         dialog.show()
         app.processEvents()
         labels = [dialog.sidebar.item(i).text() for i in range(dialog.sidebar.count())]
-        # 作者账号不是侧栏能力域：它并进「更新」页，侧栏域清单不含「关于」。
-        assert labels[-1] == "更新"
+        # 作者账号不是侧栏能力域：它并进「常规」页，侧栏域清单不含「关于」。
+        # 2026-11-01 晚起「更新」域已移除（检查更新改为独立对话框）。
+        assert labels[-1] == "文件识别"
         assert "关于" not in labels
-        assert dialog.select_page("更新") is True
+        assert "更新" not in labels
+        assert dialog.select_page("常规") is True
         app.processEvents()
         page = dialog.pages.currentWidget()
         before = copy.deepcopy(cfg.data)

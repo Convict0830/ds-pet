@@ -1386,8 +1386,9 @@ def test_modern_settings_panel_uses_sidebar_and_includes_ai_settings(tmp_path, m
     assert isinstance(dialog.pages, QStackedWidget)
     # 2026-09-19 新增「文件识别」域（拖文件解读，settings_file_interpret）。
     # 2026-10-21 新增「功能」域（功能模块启用/停用卡片，settings_features）。
-    # 2026-11-01「更新」页随检查更新恢复（更新源指向个人分叉仓库）。
-    expected_pages = ["常规", "桌宠", "互动", "菜单", "桌面组件", "功能", "AI 与对话", "自动化与联动", "语音", "文件识别", "更新"]
+    # 2026-11-01 晚「更新」域移出设置（命令不进设置页），检查更新改为独立
+    # 对话框（pet/update_settings.py），右键菜单入口不变。
+    expected_pages = ["常规", "桌宠", "互动", "菜单", "桌面组件", "功能", "AI 与对话", "自动化与联动", "语音", "文件识别"]
     assert [dialog.sidebar.item(i).text() for i in range(dialog.sidebar.count())] == expected_pages
     assert dialog.pages.count() == len(expected_pages)
     assert dialog.search_edit.placeholderText() == "搜索设置…"

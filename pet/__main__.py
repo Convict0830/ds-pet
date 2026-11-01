@@ -24,8 +24,7 @@ def _chat_available() -> bool:
         return False
 
 
-def _exec_settings(app, config, *, include_ai: bool = True, initial_page: str = "",
-                   chat_build_capable: bool | None = None) -> int:
+def _exec_settings(app, config, *, include_ai: bool = True, initial_page: str = "") -> int:
     """独立设置进程主体：锁 + 独立对话框 + 事件循环。
 
     单独拆一层是为了让测试能注入最小 QApplication/临时 Config，不必真的跑
@@ -47,8 +46,9 @@ def _exec_settings(app, config, *, include_ai: bool = True, initial_page: str = 
 
     # parent=None + standalone=True：没有桌宠窗口可依附，试听/避让由
     # pet.settings_standalone 提供进程内最小宿主。
-    dialog_kwargs = {"include_ai": include_ai, "standalone": True,
-                     "chat_build_capable": chat_build_capable}
+    # chat_build_capable 曾在此传给「更新」页选安装包变体；2026-11-01 晚
+    # 「更新」页移出设置窗后该真值由主进程的独立更新对话框直传，设置进程不再需要。
+    dialog_kwargs = {"include_ai": include_ai, "standalone": True}
     if initial_page:
         dialog_kwargs["initial_page"] = initial_page
     dialog = ModernSettingsDialog(config, parent=None, **dialog_kwargs)
@@ -133,7 +133,6 @@ def _run_settings(config=None) -> int:
     return _exec_settings(
         app, config, include_ai=_chat_available() and _feature_activation.is_active("chat"),
         initial_page=_settings_page(sys.argv),
-        chat_build_capable=_chat_available(),
     )
 
 
