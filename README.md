@@ -1,4 +1,4 @@
-# ds-pet · 半岛铁盒（个人版）
+# ds-pet
 
 <p align="center">
   <img alt="平台" src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows-8A2BE2">
@@ -8,15 +8,6 @@
 </p>
 
 一个基于 **Python + PySide6** 的独立桌面宠物：透明无边框、置顶、可拖动、角色切换、动画播放、系统托盘和可选 AI 对话能力。
-
-> **个人版说明（v1.0，2026-11-01）**
->
-> 本仓库是 [MerZlin/dsh-pet-indesktop](https://github.com/MerZlin/dsh-pet-indesktop) v4.4.0 的个人分叉，按个人需要精简：
->
-> - **仅 Windows**：macOS / Linux 的构建脚本、CI 工作流与说明已移除（`pet/` 内的平台分支代码保留，不影响运行）。
-> - **「检查更新」已指向本仓库**（[Convict0830/ds-pet](https://github.com/Convict0830/ds-pet)）：右键菜单与设置「更新」页照常可用，检查/下载/静默安装都以本仓库的 GitHub Releases 为准，发布流程见[检查更新与发布新版本](#检查更新与发布新版本)。「夸克网盘下载」保持移除（原作者的私域分发渠道）。
-> - **版本号从 1.0 重新起算**；角色素材管线与上游 v4.4.0 同世代（white-v6 lossless），上游「角色包市场」的在线素材包照常可用（素材源仍为上游公开仓库）。
-> - 上游的项目致谢、素材声明与许可证**原样保留**（见文末），感谢原作者与贡献者们。
 
 ## 目录
 
