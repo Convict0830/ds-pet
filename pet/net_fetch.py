@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """可信网络下载的共用判据（角色包市场 / 清单拉取的唯一网络出口）。
 
-历史：这些函数原住在 ``pet/updater.py``（在线更新器），本仓库转为个人版本、
-远程更新功能移除后，角色包市场（``pet/pack_download.py`` / ``pet/character_packs_page.py``）
-仍在复用这套白名单 + 逐跳校验，故独立成模块，行为与迁移前逐位一致。
+历史：这些函数原住在 ``pet/updater.py``（在线更新器）。个人版把两条网络链路的
+仓库常量分开持有：**更新源**在 ``pet/updater.py``（本仓库 Releases 的 setup.exe），
+**素材源**在这里（``REPO``：角色包市场的 ``packs-index.json`` 与分件）。
+2026-11-02 起素材源也指向本仓库——分件镜像自上游 assets-v1（内容与 sha256 逐位
+一致），由 ``scripts/mirror_character_packs.py`` 搬运与再同步，不再依赖原作者仓库在线。
 
 安全契约：
 
@@ -22,7 +24,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-REPO = 'MerZlin/dsh-pet-indesktop'
+REPO = 'Convict0830/ds-pet'
 REPO_URL = f'https://github.com/{REPO}'
 
 _TRUSTED_ASSET_HOSTS = {

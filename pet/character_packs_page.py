@@ -64,10 +64,10 @@ def _version_tuple(text: str) -> tuple[int, ...]:
 def app_supports(app_min: str) -> bool:
     """当前应用是否满足包的 ``app_min``（不满足的包显示但置灰，不隐藏）。
 
-    个人版（2026-11-01）：版本号是自有的 1.0，但素材管线仍是上游
-    ``UPSTREAM_BASELINE`` 那一世代的 white-v6 lossless——按两者取大判，
-    否则上游包市场会把本可用的包整片置灰（上游索引的 ``app_min`` 是
-    按上游版本号写的）。
+    个人版：版本号是自有的 1.0，但素材管线仍是上游 ``UPSTREAM_BASELINE`` 那一
+    世代的 white-v6 lossless——按两者取大判。本仓库自己的 ``packs-index.json``
+    （2026-11-02 起由 scripts/mirror_character_packs.py 生成）``app_min`` 写的
+    是个人版版本号；这条兜底仍保留，手动导入上游原版索引/分件时不会被整片置灰。
     """
     from . import UPSTREAM_BASELINE, __version__ as APP_VERSION
     have = max(_version_tuple(APP_VERSION), _version_tuple(UPSTREAM_BASELINE))
